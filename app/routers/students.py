@@ -2,7 +2,8 @@ from fastapi import APIRouter
 from app.schemas.student import StudentCreate, StudentResponse
 from app.crud.student import create_student as crud_create_student
 
-router = APIRouter(prefix="/students", tags=["students"])
+router = APIRouter(prefix="/student", tags=["Students"])
+
 
 @router.post("/", response_model=StudentResponse)
 async def create_student(student: StudentCreate):
