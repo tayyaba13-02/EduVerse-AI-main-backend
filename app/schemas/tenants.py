@@ -28,8 +28,12 @@ class TenantCreate(BaseModel):
         max_length=100,
         json_schema_extra={"example": "EduVerse School"},
     )
-    # tenantLogoUrl: Optional[HttpUrl] = None
-    tenantLogoUrl: Optional[str] = None
+    
+    tenantLogoUrl: Optional[HttpUrl] = Field(
+        None, 
+        json_schema_extra={"example": "https://example.com/logo.png"}
+    )
+    
     adminEmail: EmailStr = Field(
         ..., json_schema_extra={"example": "admin@example.com"}
     )
@@ -41,7 +45,7 @@ class TenantCreate(BaseModel):
 # -------------------------
 class TenantUpdate(BaseModel):
     tenantName: Optional[str] = Field(None, min_length=2, max_length=100)
-    tenantLogoUrl: Optional[str] = None
+    tenantLogoUrl: Optional[HttpUrl] = None
     status: Optional[str] = None
     subscriptionId: Optional[str] = None
 
@@ -64,7 +68,7 @@ class TenantUpdate(BaseModel):
 class TenantResponse(BaseModel):
     id: str
     tenantName: str
-    tenantLogoUrl: Optional[str] = None
+    tenantLogoUrl: Optional[HttpUrl] = None
     adminEmail: EmailStr
     status: str
     subscriptionId: Optional[str]
