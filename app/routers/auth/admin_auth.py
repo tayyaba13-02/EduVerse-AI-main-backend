@@ -30,7 +30,7 @@ async def signup_admin(payload: AdminSignupRequest):
     user = await users.create_user(user_data)
 
     # Create admin profile
-    await admins.create_admin(user["id"])
+    await admins.create_admin_profile(user["id"], tenant["id"])
 
     return {
         "message": "Admin and tenant created successfully",

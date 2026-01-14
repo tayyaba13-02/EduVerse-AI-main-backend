@@ -130,12 +130,25 @@ async def create_admin(admin: AdminCreate):
     # 2. Create ADMIN profile
     admin_doc = {
         "userId": user_id,
+        "tenantId": user_doc.get("tenantId"),
         "createdAt": datetime.utcnow(),
         "updatedAt": datetime.utcnow()
     }
     await db.admins.insert_one(admin_doc)
     
     return merge_user_data_admin(admin_doc, user_doc)
+
+async def create_admin_profile(user_id: str, tenant_id: str = None):
+    """Create only the admin profile for an existing user."""
+    admin_doc = {
+        "userId": ObjectId(user_id) if isinstance(user_id, str) else user_id,
+        "tenantId": ObjectId(tenant_id) if tenant_id and isinstance(tenant_id, str) else tenant_id,
+        "createdAt": datetime.utcnow(),
+        "updatedAt": datetime.utcnow()
+    }
+    await db.admins.insert_one(admin_doc)
+    return admin_doc
+
 
 async def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)

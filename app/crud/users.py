@@ -15,6 +15,9 @@ def serialize_user(u: dict):
         "role": u["role"],
         "status": u["status"],
         "tenantId": str(u["tenantId"]) if u.get("tenantId") else None,
+        "studentId": u.get("studentId"),
+        "teacherId": u.get("teacherId"),
+        "adminId": u.get("adminId"),
         "createdAt": u.get("createdAt"),
         "updatedAt": u["updatedAt"],
         "lastLogin": u.get("lastLogin"),
@@ -44,20 +47,34 @@ async def verify_user(email: str, password: str):
     u = await get_user_by_email(email)
     if not u or not verify_password(password, u["password"]):
         return None
+
+    # After verifying, fetch the role-specific doc to get the tenant_id and role-specific ID
+    user_id = u["_id"]
+    role = u["role"]
+    tenant_id = u.get("tenantId") # Start with tenantId from users collection
+    role_doc = None
+
+    if role == "teacher":
+        role_doc = await db.teachers.find_one({"userId": user_id})
+    elif role == "student":
+        role_doc = await db.students.find_one({"userId": user_id})
+    elif role == "admin":
+        role_doc = await db.admins.find_one({"userId": user_id})
     
-    user_data = serialize_user(u)
-    
-    # Add role-specific profile ID
-    if u["role"] == "student":
-        student = await db.students.find_one({"userId": u["_id"]})
-        if student:
-            user_data["studentId"] = str(student["_id"])
-    elif u["role"] == "teacher":
-        teacher = await db.teachers.find_one({"userId": u["_id"]})
-        if teacher:
-            user_data["teacherId"] = str(teacher["_id"])
+    # If the role-specific document has a tenantId, it takes precedence
+    if role_doc and role_doc.get("tenantId"):
+        tenant_id = role_doc.get("tenantId")
             
-    return user_data
+    # Add tenantId and role-specific ID to the user object before serializing
+    u["tenantId"] = tenant_id
+    if role == "teacher" and role_doc:
+        u["teacherId"] = str(role_doc["_id"])
+    elif role == "student" and role_doc:
+        u["studentId"] = str(role_doc["_id"])
+    elif role == "admin" and role_doc:
+        u["adminId"] = str(role_doc["_id"])
+    
+    return serialize_user(u)
 
 
 async def update_last_login(user_id: str):

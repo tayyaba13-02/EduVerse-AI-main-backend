@@ -1,4 +1,5 @@
-from fastapi import HTTPException, status, APIRouter, Query
+from fastapi import HTTPException, status, APIRouter, Query, Depends
+from app.auth.dependencies import require_role
 from bson import ObjectId
 from typing import Optional
 from app.schemas.tenants import TenantResponse, TenantCreate, TenantUpdate
@@ -6,7 +7,8 @@ from app.crud.tenants import create_tenant, get_all_tenants, delete_tenant, get_
 
 router = APIRouter(
     prefix="/tenants",
-    tags=["Tenants"]
+    tags=["Tenants"],
+    dependencies=[Depends(require_role("super_admin"))]
 )
 
 # -------------------------

@@ -17,7 +17,15 @@ async def login_user(email: str, password: str):
     await update_last_login(user["id"])
 
     token = create_access_token(
-        {"user_id": user["id"], "role": user["role"], "tenant_id": user["tenantId"]}
+        {
+            "user_id": user["id"],
+            "role": user["role"],
+            "tenant_id": user["tenantId"],
+            "student_id": user.get("studentId"),
+            "teacher_id": user.get("teacherId"),
+            "admin_id": user.get("adminId"),
+            "full_name": user.get("fullName"),
+        }
     )
 
     return {"access_token": token, "token_type": "bearer", "user": user}
