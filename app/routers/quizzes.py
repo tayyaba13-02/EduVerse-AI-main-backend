@@ -9,7 +9,8 @@ from app.crud.quizzes import (
     get_quizzes_filtered,
     update_quiz,
     delete_quiz,
-    get_student_quizzes
+    get_student_quizzes,
+    has_quiz_submissions
 )
 from app.auth.dependencies import get_current_user
 
@@ -37,7 +38,7 @@ async def get_my_quizzes(current_user=Depends(get_current_user)):
 def _validate_objectid(_id: str):
     """Ensures that incoming IDs are valid MongoDB ObjectIds."""
     if not ObjectId.is_valid(_id):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ObjectId")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ID format provided")
 
 # ------------------ CREATE QUIZ ------------------
 @router.post("/", response_model=QuizResponse, summary="Create a new quiz")
@@ -99,12 +100,31 @@ async def update_quiz_route(
     result = await update_quiz(quiz_id, teacher_id, updates.model_dump(exclude_unset=True))
 
     if result == "Unauthorized":
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Only the owner teacher can edit this quiz")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="You are not authorized to edit this quiz. Only the quiz creator can make changes."
+        )
 
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quiz not found")
 
     return result
+
+
+# ------------------ CHECK SUBMISSIONS ------------------
+@router.get("/{quiz_id}/has-submissions", summary="Check if quiz has student submissions")
+async def check_quiz_submissions(quiz_id: str):
+    """
+    Check if a quiz has any student submissions.
+    Useful for frontend to warn teachers before editing.
+    """
+    _validate_objectid(quiz_id)
+    has_subs = await has_quiz_submissions(quiz_id)
+    return {
+        "quizId": quiz_id,
+        "hasSubmissions": has_subs,
+        "message": "Questions cannot be modified once students have submitted answers." if has_subs else "Quiz can be fully edited."
+    }
 
 
 # ------------------ DELETE QUIZ ------------------
@@ -119,9 +139,12 @@ async def delete_quiz_route(
     result = await delete_quiz(quiz_id, teacher_id)
 
     if result == "Unauthorized":
-        raise HTTPException(401, "Only the owner teacher can delete this quiz")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="You are not authorized to delete this quiz. Only the quiz creator can delete it."
+        )
 
     if result is None:
-        raise HTTPException(404, "Quiz not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quiz not found")
 
     return {"message": "Quiz deleted successfully"}

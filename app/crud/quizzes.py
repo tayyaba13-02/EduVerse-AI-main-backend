@@ -129,7 +129,14 @@ async def get_quizzes_filtered(
     return [serialize_quiz(q) async for q in cursor]
 
 async def update_quiz(_id: str, teacherId: str, updates: dict):
-    """Update a quiz only if the teacher is the owner."""
+    """
+    Update a quiz only if the teacher is the owner.
+    
+    IMPORTANT: If students have already submitted answers for this quiz,
+    question modifications (questions, totalMarks) are NOT allowed to prevent
+    score inconsistencies (e.g., student scored 2/3 but teacher removes a question).
+    Only metadata updates (description, dueDate, status, timeLimitMinutes) are permitted.
+    """
 
     _ensure_objectid(_id, "quizId")
     teacherId = str(teacherId)
@@ -142,13 +149,27 @@ async def update_quiz(_id: str, teacherId: str, updates: dict):
     if str(quiz["teacherId"]) != teacherId:
         return "Unauthorized"
 
+    # Check if any student submissions exist for this quiz
+    submission_count = await db.quizSubmissions.count_documents({"quizId": ObjectId(_id)})
+    has_submissions = submission_count > 0
+
     # filter only meaningful values
     safe_updates = {}
+    # Fields that can ALWAYS be updated (metadata only)
+    allowed_always = {"description", "dueDate", "status", "timeLimitMinutes", "aiGenerated"}
+    # Fields that can ONLY be updated if NO submissions exist
+    restricted_fields = {"questions", "totalMarks", "quizNumber"}
+
     for k, val in updates.items():
         if val is None:
             continue
         if val == "":
             continue
+        
+        # If submissions exist, block restricted field updates
+        if has_submissions and k in restricted_fields:
+            continue  # Skip this update silently, or you could raise an error
+        
         safe_updates[k] = val
 
     # Update timestamp
@@ -189,6 +210,17 @@ async def delete_quiz(_id, teacherId):
 
 
     return True
+
+
+async def has_quiz_submissions(quiz_id: str) -> bool:
+    """
+    Check if a quiz has any student submissions.
+    Returns True if at least one submission exists.
+    """
+    _ensure_objectid(quiz_id, "quizId")
+    count = await db.quizSubmissions.count_documents({"quizId": ObjectId(quiz_id)})
+    return count > 0
+
 
 async def get_student_quizzes(user_id: str, tenant_id: str):
     """
