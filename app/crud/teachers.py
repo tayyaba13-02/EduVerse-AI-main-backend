@@ -10,6 +10,7 @@ from app.utils.security import hash_password
 
 # ------------------ Helpers ------------------
 
+
 def to_oid(id_str: str, field: str) -> ObjectId:
     try:
         return ObjectId(id_str)
@@ -45,23 +46,24 @@ def serialize_teacher(t: dict) -> dict:
     for c in t.get("assignedCourses", []):
         assigned_courses.append(str(c))
 
-def serialize_teacher(t, user):
-    tenant_id = t.get("tenantId")
-    # Convert ObjectIds in assignedCourses to strings
-    assigned_courses = [str(c) if isinstance(c, ObjectId) else c for c in t.get("assignedCourses", [])]
     return {
         "id": str(t["_id"]),
-        "userId": str(t["userId"]),
-        "tenantId": str(tenant_id) if tenant_id else None,
-        "user": serialize_user(user),  # attach user
+        "fullName": t.get("fullName", ""),
+        "email": t.get("email", ""),
+        "profileImageURL": t.get("profileImageURL", ""),
         "assignedCourses": assigned_courses,
-        "qualifications": t.get("qualifications", []),
-        "subjects": t.get("subjects", []),
-        "status": t.get("status"),
+        "contactNo": t.get("contactNo"),
+        "country": t.get("country"),
+        "status": t.get("status", "active"),
+        "role": t.get("role", "teacher"),
+        "qualifications": qualifications,
+        "subjects": subjects,
+        "tenantId": str(t.get("tenantId", "")),
         "createdAt": t.get("createdAt"),
         "updatedAt": t.get("updatedAt"),
         "lastLogin": t.get("lastLogin"),
     }
+
 
 def merge_user_data_teacher(teacher_doc, user_doc):
     if not teacher_doc:
@@ -79,9 +81,10 @@ def merge_user_data_teacher(teacher_doc, user_doc):
         merged["lastLogin"] = user_doc.get("lastLogin")
     return serialize_teacher(merged)
 
+
 async def create_teacher(data: TeacherCreate):
     d = data.dict()
-    
+
     # 1. Create USER document
     user_doc = {
         "fullName": d["fullName"],
@@ -95,13 +98,15 @@ async def create_teacher(data: TeacherCreate):
         "tenantId": ObjectId(d["tenantId"]),
         "createdAt": datetime.utcnow(),
         "updatedAt": datetime.utcnow(),
-        "lastLogin": None
+        "lastLogin": None,
     }
-    
+
     # 0. Check if tenant exists
     tenant = await db.tenants.find_one({"_id": ObjectId(d["tenantId"])})
     if not tenant:
-        raise HTTPException(status_code=404, detail=f"Tenant not found with ID: {d['tenantId']}")
+        raise HTTPException(
+            status_code=404, detail=f"Tenant not found with ID: {d['tenantId']}"
+        )
 
     user_result = await users_collection.insert_one(user_doc)
     user_id = user_result.inserted_id
@@ -110,28 +115,33 @@ async def create_teacher(data: TeacherCreate):
     teacher_doc = {
         "userId": user_id,
         "tenantId": ObjectId(d["tenantId"]),
-        "assignedCourses": [ObjectId(c) if ObjectId.is_valid(c) else c for c in d.get("assignedCourses", [])],
+        "assignedCourses": [
+            ObjectId(c) if ObjectId.is_valid(c) else c
+            for c in d.get("assignedCourses", [])
+        ],
         "qualifications": d.get("qualifications", []),
         "subjects": d.get("subjects", []),
         "createdAt": datetime.utcnow(),
-        "updatedAt": datetime.utcnow()
+        "updatedAt": datetime.utcnow(),
     }
 
     result = await db.teachers.insert_one(teacher_doc)
-    
+
     # Return combined data
     return merge_user_data_teacher(teacher_doc, user_doc)
 
 
 async def get_all_teachers():
     pipeline = [
-        {"$lookup": {
-            "from": "users",
-            "localField": "userId",
-            "foreignField": "_id",
-            "as": "userDetails"
-        }},
-        {"$unwind": {"path": "$userDetails", "preserveNullAndEmptyArrays": True}}
+        {
+            "$lookup": {
+                "from": "users",
+                "localField": "userId",
+                "foreignField": "_id",
+                "as": "userDetails",
+            }
+        },
+        {"$unwind": {"path": "$userDetails", "preserveNullAndEmptyArrays": True}},
     ]
     cursor = db.teachers.aggregate(pipeline)
     results = []
@@ -153,9 +163,9 @@ async def update_teacher(id: str, updates: dict):
     teacher = await db.teachers.find_one({"_id": to_oid(id, "teacherId")})
     if not teacher:
         return None
-    
+
     user_id = teacher.get("userId")
-    
+
     # 2. Clean data: Filter out empty strings for optional fields to avoid overwriting with empty
     # except for profileImageURL which might be cleared intentionally
     cleaned_updates = {}
@@ -165,16 +175,27 @@ async def update_teacher(id: str, updates: dict):
         if isinstance(v, str) and v.strip() == "" and k != "profileImageURL":
             continue
         cleaned_updates[k] = v
-        
+
     if not cleaned_updates:
         return await get_teacher(id)
 
     cleaned_updates["updatedAt"] = datetime.utcnow()
 
     # Split fields between User and Teacher
-    user_fields = ["fullName", "email", "profileImageURL", "contactNo", "country", "status"]
+    user_fields = [
+        "fullName",
+        "email",
+        "profileImageURL",
+        "contactNo",
+        "country",
+        "status",
+    ]
     user_updates = {k: v for k, v in cleaned_updates.items() if k in user_fields}
-    teacher_updates = {k: v for k, v in cleaned_updates.items() if k not in user_fields and k != "updatedAt"}
+    teacher_updates = {
+        k: v
+        for k, v in cleaned_updates.items()
+        if k not in user_fields and k != "updatedAt"
+    }
 
     if user_updates and user_id:
         user_updates["updatedAt"] = datetime.utcnow()
@@ -184,10 +205,15 @@ async def update_teacher(id: str, updates: dict):
         if "tenantId" in teacher_updates:
             teacher_updates["tenantId"] = ObjectId(teacher_updates["tenantId"])
         if "assignedCourses" in teacher_updates:
-             teacher_updates["assignedCourses"] = [ObjectId(c) if ObjectId.is_valid(c) else c for c in teacher_updates["assignedCourses"]]
-        
+            teacher_updates["assignedCourses"] = [
+                ObjectId(c) if ObjectId.is_valid(c) else c
+                for c in teacher_updates["assignedCourses"]
+            ]
+
         teacher_updates["updatedAt"] = datetime.utcnow()
-        await db.teachers.update_one({"_id": to_oid(id, "teacherId")}, {"$set": teacher_updates})
+        await db.teachers.update_one(
+            {"_id": to_oid(id, "teacherId")}, {"$set": teacher_updates}
+        )
 
     return await get_teacher(id)
 
@@ -196,16 +222,18 @@ async def delete_teacher(id: str):
     teacher = await db.teachers.find_one({"_id": to_oid(id, "teacherId")})
     if not teacher:
         return False
-        
+
     user_id = teacher.get("userId")
-    
+
     # 1. Delete from teachers
     result = await db.teachers.delete_one({"_id": to_oid(id, "teacherId")})
-    
+
     # 2. Delete from users
     if user_id:
-        await users_collection.delete_one({"_id": ObjectId(user_id) if not isinstance(user_id, ObjectId) else user_id})
-        
+        await users_collection.delete_one(
+            {"_id": ObjectId(user_id) if not isinstance(user_id, ObjectId) else user_id}
+        )
+
     return result.deleted_count > 0
 
 
@@ -213,30 +241,32 @@ async def change_password(id: str, old_password: str, new_password: str):
     teacher = await db.teachers.find_one({"_id": to_oid(id, "teacherId")})
     if not teacher:
         return None
-    
+
     user_id = teacher.get("userId")
     if not user_id:
         return None
-        
+
     user = await users_collection.find_one({"_id": user_id})
     if not user:
         return None
-        
+
     from passlib.context import CryptContext
+
     pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    
+
     if not pwd_context.verify(old_password, user.get("password", "")):
         return "INCORRECT"
 
     hashed_new = hash_password(new_password)
     await users_collection.update_one(
         {"_id": user_id},
-        {"$set": {"password": hashed_new, "updatedAt": datetime.utcnow()}}
+        {"$set": {"password": hashed_new, "updatedAt": datetime.utcnow()}},
     )
     return True
 
 
 # ------------------ Assignments ------------------
+
 
 async def serialize_assignment(a: dict) -> dict:
     return {
@@ -254,8 +284,9 @@ async def serialize_assignment(a: dict) -> dict:
         "allowedFormats": a.get("allowedFormats", []),
         "tenantId": str(a["tenantId"]),
         "uploadedAt": a.get("uploadedAt"),
-        "updatedAt": a.get("updatedAt")
+        "updatedAt": a.get("updatedAt"),
     }
+
 
 async def get_teacher_assignments_route(teacher_id: str):
     oid = to_oid(teacher_id, "teacherId")
@@ -278,6 +309,7 @@ async def create_teacher_assignment_route(data: AssignmentCreate):
 
 # ------------------ Quizzes ------------------
 
+
 async def get_teacher_quizzes_route(teacher_id: str):
     oid = to_oid(teacher_id, "teacherId")
     cursor = db.quizzes.find({"teacherId": oid})
@@ -299,15 +331,18 @@ async def create_teacher_quiz_route(data: QuizCreate):
 
 # ------------------ Dashboard / Students / Courses ------------------
 
+
 async def get_teacher_dashboard(teacher_id: str):
     assignments = await get_teacher_assignments_route(teacher_id)
     quizzes = await get_teacher_quizzes_route(teacher_id)
-    courses = [c async for c in db.courses.find({"teacherId": to_oid(teacher_id, "teacherId")})]
+    courses = [
+        c async for c in db.courses.find({"teacherId": to_oid(teacher_id, "teacherId")})
+    ]
 
     return {
         "totalAssignments": len(assignments),
         "totalQuizzes": len(quizzes),
-        "totalCourses": len(courses)
+        "totalCourses": len(courses),
     }
 
 
@@ -320,40 +355,42 @@ async def get_teacher_students(teacher_id: str):
 #     cursor = db.courses.find({"teacherId": to_oid(teacher_id, "teacherId")})
 #     return [c async for c in cursor]
 
+
 async def get_teacher_courses(teacher_id: str):
     # Convert teacher_id to ObjectId
     teacher_oid = to_oid(teacher_id, "teacherId")
 
     # Query courses where teacherId matches
     cursor = db.courses.find({"teacherId": teacher_oid})
-    
+
     courses = []
     async for c in cursor:
-        courses.append({
-            "id": str(c["_id"]),
-            "title": c.get("title", ""),
-            "description": c.get("description", ""),
-            "category": c.get("category", ""),
-            "status": c.get("status", ""),
-            "courseCode": c.get("courseCode", ""),
-            "duration": c.get("duration", ""),
-            "thumbnailUrl": c.get("thumbnailUrl", ""),
-            "modules": c.get("modules", []),
-            "teacherId": str(c.get("teacherId", "")),
-            "tenantId": str(c.get("tenantId", "")),
-            "enrolledStudents": c.get("enrolledStudents", 0),
-            "createdAt": c.get("createdAt"),
-            "updatedAt": c.get("updatedAt")
-        })
-    
-    return courses
+        courses.append(
+            {
+                "id": str(c["_id"]),
+                "title": c.get("title", ""),
+                "description": c.get("description", ""),
+                "category": c.get("category", ""),
+                "status": c.get("status", ""),
+                "courseCode": c.get("courseCode", ""),
+                "duration": c.get("duration", ""),
+                "thumbnailUrl": c.get("thumbnailUrl", ""),
+                "modules": c.get("modules", []),
+                "teacherId": str(c.get("teacherId", "")),
+                "tenantId": str(c.get("tenantId", "")),
+                "enrolledStudents": c.get("enrolledStudents", 0),
+                "createdAt": c.get("createdAt"),
+                "updatedAt": c.get("updatedAt"),
+            }
+        )
 
+    return courses
 
 
 async def get_teacher_by_user(user_id: str):
     if isinstance(user_id, str):
         user_id = ObjectId(user_id)
-    
+
     teacher = await db.teachers.find_one({"userId": user_id})
     if not teacher:
         return None
@@ -369,19 +406,31 @@ async def update_teacher_profile(user_id: str, updates: dict):
     teacher = await db.teachers.find_one({"userId": user_id})
     if not teacher:
         return None
-    
+
     # Separation logic similar to generic update
     cleaned_updates = {}
     for k, v in updates.items():
-        if v is None: continue
+        if v is None:
+            continue
         # if isinstance(v, str) and v.strip() == "" and k != "profileImageURL": continue
         cleaned_updates[k] = v
-        
+
     cleaned_updates["updatedAt"] = datetime.utcnow()
 
-    user_fields = ["fullName", "email", "profileImageURL", "contactNo", "country", "status"]
+    user_fields = [
+        "fullName",
+        "email",
+        "profileImageURL",
+        "contactNo",
+        "country",
+        "status",
+    ]
     user_updates = {k: v for k, v in cleaned_updates.items() if k in user_fields}
-    teacher_updates = {k: v for k, v in cleaned_updates.items() if k not in user_fields and k != "updatedAt"}
+    teacher_updates = {
+        k: v
+        for k, v in cleaned_updates.items()
+        if k not in user_fields and k != "updatedAt"
+    }
 
     if user_updates:
         user_updates["updatedAt"] = datetime.utcnow()
