@@ -1,5 +1,3 @@
-
-
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
@@ -30,7 +28,6 @@ class LessonSchema(BaseModel):
     content: Optional[str] = None
     order: int = 0
 
-
 # Schema for a single course module (title, description, content, etc.)
 class ModuleSchema(BaseModel):
     id: Optional[str] = None
@@ -39,7 +36,6 @@ class ModuleSchema(BaseModel):
     content: Optional[str] = None
     lessons: List[LessonSchema] = []
     order: int = 0
-
 
 # Base schema containing shared fields for all course-related operations
 class CourseBase(BaseModel):
@@ -52,18 +48,16 @@ class CourseBase(BaseModel):
     duration: Optional[str] = None
     thumbnailUrl: Optional[str] = ""
     modules: List[ModuleSchema] = []
-    isPublic: bool = True  # true = in marketplace, false = private (invite only)
+    isPublic: bool = True  # true = in marketplace, false = private 
     isFree: bool = True
     price: Optional[float] = 0
     currency: Optional[str] = "USD"
-
 
 # Schema for creating a new course (requires IDs for teacher and tenant)
 class CourseCreate(CourseBase):
     teacherId: str
     tenantId: str
     enrolledStudents: int = 0
-
 
 # Schema for updating an existing course (all fields are optional)
 class CourseUpdate(BaseModel):
@@ -110,17 +104,14 @@ class CourseWithProgress(CourseResponse):
     totalLessons: Optional[int] = 0
     nextLesson: Optional[str] = None
 
-
 # Schema for reordering lessons within a module
 class ReorderLessonsRequest(BaseModel):
     moduleId: str
     lessonIds: List[str]  # Ordered list of lesson IDs
 
-
 # Schema for reordering modules within a course
 class ReorderModulesRequest(BaseModel):
     moduleIds: List[str]  # Ordered list of module IDs
-
 
 # Schema for publishing/unpublishing a course
 class PublishCourseRequest(BaseModel):
