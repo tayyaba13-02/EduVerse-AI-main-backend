@@ -12,20 +12,19 @@ class CourseCRUD:
         self.students_collection = get_students_collection()
         self.users_collection = users_collection
 
-    def clean_update_data(self, update_dict: Dict[str, Any]) -> Dict[str, Any]:
+    async def clean_update_data(self, update_dict: Dict[str, Any]) -> Dict[str, Any]:
         """
         Cleans the update dictionary by removing nulls, default 'string' placeholders, 
         and empty values that shouldn't be overridden.
-        
-        Args:
-            update_dict: The raw dictionary containing potential updates.
-            
-        Returns:
-            A sanitized dictionary ready for the database $set operation.
         """
         cleaned = {}
         
         for key, value in update_dict.items():
+            # Explicitly allow boolean False (for toggles)
+            if isinstance(value, bool):
+                cleaned[key] = value
+                continue
+
             # Skip null values to avoid unintentional field deletion
             if value is None:
                 continue
@@ -320,7 +319,7 @@ class CourseCRUD:
 
         # Convert schema to dict and remove unset fields
         update_data = course_update.dict(exclude_unset=True)
-        cleaned_data = self.clean_update_data(update_data)
+        cleaned_data = await self.clean_update_data(update_data)
         
         # If no valid updates after cleaning, just return current state
         if not cleaned_data:
